@@ -1,1 +1,1211 @@
+//+------------------------------------------------------------------+
+//|                          NL 3.1 Optimized                        |
+//|                       Copyright 2025, H3NST7                     |
+//|                           www.H3NST7.com                         |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2025, H3NST7"
+#property link      "https://www.H3NST&=7.com"
+#property version   "3.1"
+#property strict
 
+#include <Trade\Trade.mqh>
+#include <Trade\OrderInfo.mqh>
+#include <Math\Stat\Math.mqh>
+#include <Math\Alglib\alglib.mqh>
+#include <Arrays\ArrayObj.mqh>
+
+// **Enums**
+enum ENUM_TREND_MODE { TREND_NEUTRAL, TREND_BULLISH, TREND_BEARISH };
+enum ENUM_MARKET_REGIME { REGIME_HIGH_VOLATILITY, REGIME_TRENDING, REGIME_MEAN_REVERSION };
+enum LOG_LEVEL { LOG_INFO, LOG_WARN, LOG_ERROR };
+
+// **Input Parameters**
+input string InpSymbol = "XAUUSD";                  // Trading symbol
+input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M1;     // Timeframe
+input double InpRiskPercentInput = 0.25;            // Risk percentage per trade
+input int InpMagicNumber = 11223344;                // Magic number
+input int InpMaxTrades = 3;                         // Max open trades
+input int InpATRPeriod = 14;                        // ATR period
+input double InpATRMultiplierSLInput = 1.5;         // ATR multiplier for SL
+input double InpATRMultiplierTPInput = 2.0;         // ATR multiplier for TP
+input double InpMaxSpread = 30.0;                   // Max allowed spread (points)
+input double MinATR = 2.0;                          // Minimum ATR for trade
+input int TradeCooldown = 60;                       // Trade cooldown (seconds)
+input bool UseNewCandle = true;                     // Trade on new candle only
+input int InpMATrendPeriodInput = 50;               // MA trend period
+input int InpMAScalpPeriodInput = 20;               // MA scalp period
+input ENUM_MA_METHOD InpMAMethod = MODE_LWMA;       // Moving average method
+input int InpRSIPeriod = 14;                        // RSI period
+input double InpRSIOverboughtInput = 70.0;          // RSI overbought level
+input double InpRSIOversoldInput = 30.0;            // RSI oversold level
+input bool InpTrailingEnabled = true;               // Enable trailing stop
+input double InpTrailingTrigger = 100.0;            // Trailing trigger (points)
+input double InpTrailingStep = 20.0;                // Trailing step (points)
+input double InpMaxDailyLoss = 5.0;                 // Max daily loss (%)
+input int InpCooloffPeriod = 2;                     // Cool-off period (minutes)
+input double RiskPerTrade = 1.0;                    // Risk per trade multiplier
+input double RiskRewardRatio = 1.5;                 // Risk-reward ratio
+input bool InpNewsFilter = true;                    // Enable news filter
+input int InpNewsBeforeMin = 60;                    // Minutes before news to pause
+input int InpNewsAfterMin = 60;                     // Minutes after news to pause
+input int NewsImpactThreshold = 2;                  // Minimum news impact
+input int NewsCacheMinutes = 60;                    // News cache duration (minutes)
+input double InpSlippageInput = 2.0;                // Max slippage (points)
+input bool InpStealthMode = true;                   // Enable stealth mode
+input int InpOrderSizeVariation = 15;               // Order size variation (%)
+input int InpMaxLayers = 3;                         // Max order layers
+input bool InpSmartOrderRouting = false;            // Enable smart order routing
+input int InpLiquidityProviders = 50;               // Liquidity providers
+input bool InpUseNeuralNet = true;                  // Use neural network
+input double InpNNLearningRateInput = 0.01;         // Neural net learning rate
+input bool InpQuantumOptimize = true;               // Enable quantum optimization
+input int InpQOptimizeInterval = 300;               // Optimization interval (seconds)
+input string CorrelationSymbols = "XAUUSD,EURUSD,GBPUSD,USDJPY,USDCAD,AUDUSD,NZDUSD,XAGUSD"; // Correlation symbols
+input int CorrelationLookback = 100;                // Correlation lookback period
+input bool UseLogReturns = true;                    // Use log returns for correlation
+
+// **Modifiable Global Variables**
+double InpRiskPercent = InpRiskPercentInput;
+double InpATRMultiplierSL = InpATRMultiplierSLInput;
+double InpATRMultiplierTP = InpATRMultiplierTPInput;
+double InpRSIOverbought = InpRSIOverboughtInput;
+double InpRSIOversold = InpRSIOversoldInput;
+int InpMATrendPeriod = InpMATrendPeriodInput;
+int InpMAScalpPeriod = InpMAScalpPeriodInput;
+double InpSlippage = InpSlippageInput;
+double InpNNLearningRate = InpNNLearningRateInput;
+
+// **Structs**
+struct SymbolData {
+   string symbol;
+   double currentPrice;
+};
+
+struct GeneticParameters {
+   double atrSlMultiplier;
+   double atrTpMultiplier;
+   double rsiOverbought;
+   double rsiOversold;
+};
+
+struct IndicatorValues {
+   double atr, maTrend, maScalp, rsi;
+   bool valid;
+};
+
+// **Classes**
+class NeuralProcessor {
+private:
+   CMatrixDouble weights1, weights2;
+   int inputSize, hiddenSize, outputSize;
+
+public:
+   NeuralProcessor(int in, int hid, int out) : inputSize(in), hiddenSize(hid), outputSize(out) {
+      weights1.Resize(in, hid);
+      weights2.Resize(hid, out);
+      InitializeWeights();
+   }
+
+   void InitializeWeights() {
+      double limit = MathSqrt(6.0 / (inputSize + hiddenSize));
+      for(int i = 0; i < inputSize; i++)
+         for(int j = 0; j < hiddenSize; j++)
+            weights1.Set(i, j, (MathRand() / 32767.0 * 2 - 1) * limit);
+      limit = MathSqrt(6.0 / (hiddenSize + outputSize));
+      for(int i = 0; i < hiddenSize; i++)
+         for(int j = 0; j < outputSize; j++)
+            weights2.Set(i, j, (MathRand() / 32767.0 * 2 - 1) * limit);
+   }
+
+   double ForwardPass(const double &inputs[]) {
+      if(ArraySize(inputs) != inputSize) return 0.0;
+      double hidden[];
+      ArrayResize(hidden, hiddenSize);
+      ArrayInitialize(hidden, 0);
+      for(int j = 0; j < hiddenSize; j++) {
+         for(int i = 0; i < inputSize; i++)
+            hidden[j] += inputs[i] * weights1[i][j];
+         hidden[j] = MathTanh(hidden[j]);
+      }
+      double output = 0;
+      for(int j = 0; j < hiddenSize; j++)
+         output += hidden[j] * weights2[j][0];
+      return MathTanh(output);
+   }
+
+   void Train(const double &inputs[], double target) {
+      if(ArraySize(inputs) != inputSize) return;
+      double hidden[];
+      ArrayResize(hidden, hiddenSize);
+      ArrayInitialize(hidden, 0);
+      for(int j = 0; j < hiddenSize; j++) {
+         for(int i = 0; i < inputSize; i++)
+            hidden[j] += inputs[i] * weights1[i][j];
+         hidden[j] = MathTanh(hidden[j]);
+      }
+      double output = 0;
+      for(int j = 0; j < hiddenSize; j++)
+         output += hidden[j] * weights2[j][0];
+      output = MathTanh(output);
+
+      double error = target - output;
+      double deltaOutput = error * (1 - output * output);
+      double deltaHidden[];
+      ArrayResize(deltaHidden, hiddenSize);
+      for(int j = 0; j < hiddenSize; j++)
+         deltaHidden[j] = deltaOutput * weights2[j][0] * (1 - hidden[j] * hidden[j]);
+
+      for(int j = 0; j < hiddenSize; j++)
+         weights2.Set(j, 0, weights2[j][0] + InpNNLearningRate * deltaOutput * hidden[j]);
+      for(int i = 0; i < inputSize; i++)
+         for(int j = 0; j < hiddenSize; j++)
+            weights1.Set(i, j, weights1[i][j] + InpNNLearningRate * deltaHidden[j] * inputs[i]);
+   }
+};
+
+class QuantumOptimizer {
+private:
+   double parameters[10];
+   double bestParams[10];
+   double bestScore;
+
+public:
+   QuantumOptimizer() {
+      parameters[0] = InpATRMultiplierSL; parameters[1] = InpATRMultiplierTP; parameters[2] = InpRSIOverbought;
+      parameters[3] = InpRSIOversold; parameters[4] = InpMATrendPeriod; parameters[5] = InpMAScalpPeriod;
+      parameters[6] = InpRiskPercent; parameters[7] = InpNNLearningRate; parameters[8] = 1.0; parameters[9] = InpSlippage;
+      ArrayCopy(bestParams, parameters);
+      bestScore = -DBL_MAX;
+   }
+
+   void Optimize() {
+      double candidate[10];
+      ArrayCopy(candidate, parameters);
+      for(int i = 0; i < 10; i++)
+         candidate[i] += (MathRand() / 32767.0 - 0.5) * 0.05; // Reduced step size for stability
+      candidate[4] = MathRound(MathMax(20, MathMin(100, candidate[4])));
+      candidate[5] = MathRound(MathMax(10, MathMin(50, candidate[5])));
+
+      double candidateScore = EvaluateParameters(candidate);
+      if(candidateScore > bestScore) {
+         ArrayCopy(bestParams, candidate);
+         bestScore = candidateScore;
+      }
+
+      if(MathRand() / 32767.0 < 0.1) // Reduced random jump probability
+         for(int i = 0; i < 10; i++)
+            parameters[i] = MathRand() / 32767.0 * (i < 4 ? 1.5 : (i < 6 ? 50 : 1));
+      else
+         ArrayCopy(parameters, bestParams);
+   }
+
+   double EvaluateParameters(double &candidate[]) {
+      double profit = 0, trades = 0, winTrades = 0, maxDrawdown = 0, equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      double tempSL = InpATRMultiplierSL, tempTP = InpATRMultiplierTP;
+      double tempRSIOB = InpRSIOverbought, tempRSIOS = InpRSIOversold;
+      int tempMATrend = InpMATrendPeriod, tempMAScalp = InpMAScalpPeriod;
+      double tempRisk = InpRiskPercent, tempNNLR = InpNNLearningRate;
+      double localLayerStep = layerStep, tempSlippage = InpSlippage;
+
+      InpATRMultiplierSL = MathMax(0.5, MathMin(2.5, candidate[0]));
+      InpATRMultiplierTP = MathMax(1.0, MathMin(3.0, candidate[1]));
+      InpRSIOverbought = MathMax(60.0, MathMin(85.0, candidate[2]));
+      InpRSIOversold = MathMax(15.0, MathMin(40.0, candidate[3]));
+      InpMATrendPeriod = (int)candidate[4];
+      InpMAScalpPeriod = (int)candidate[5];
+      InpRiskPercent = MathMax(0.1, MathMin(2.0, candidate[6]));
+      InpNNLearningRate = MathMax(0.005, MathMin(0.05, candidate[7]));
+      layerStep = MathMax(0.5, MathMin(3.0, candidate[8]));
+      InpSlippage = MathMax(1.0, MathMin(5.0, candidate[9]));
+
+      for(int i = 1; i <= 100 && i < iBars(InpSymbol, InpTimeframe); i++) {
+         MqlTick tick;
+         tick.bid = iClose(InpSymbol, InpTimeframe, i);
+         tick.ask = tick.bid + SymbolInfoInteger(InpSymbol, SYMBOL_SPREAD) * point;
+         double volatility = iATR(InpSymbol, InpTimeframe, InpATRPeriod) / point;
+         ENUM_TREND_MODE trend = GetTrendDirectionSim(i);
+         double maScalp = iMA(InpSymbol, InpTimeframe, InpMAScalpPeriod, 0, InpMAMethod, PRICE_CLOSE);
+         double rsi = iRSI(InpSymbol, InpTimeframe, InpRSIPeriod, PRICE_CLOSE);
+         if(CheckBuyCondition(trend, volatility, tick, REGIME_TRENDING, 0.8, maScalp, rsi)) {
+            double tradeProfit = (tick.ask + volatility * InpATRMultiplierTP * point - tick.ask);
+            profit += tradeProfit;
+            trades++;
+            if(tradeProfit > 0) winTrades++;
+            equity += tradeProfit;
+            maxDrawdown = MathMax(maxDrawdown, AccountInfoDouble(ACCOUNT_EQUITY) - equity);
+         } else if(CheckSellCondition(trend, volatility, tick, REGIME_TRENDING, -0.8, maScalp, rsi)) {
+            double tradeProfit = (tick.bid - (tick.bid - volatility * InpATRMultiplierTP * point));
+            profit += tradeProfit;
+            trades++;
+            if(tradeProfit > 0) winTrades++;
+            equity += tradeProfit;
+            maxDrawdown = MathMax(maxDrawdown, AccountInfoDouble(ACCOUNT_EQUITY) - equity);
+         }
+      }
+
+      InpATRMultiplierSL = tempSL; InpATRMultiplierTP = tempTP;
+      InpRSIOverbought = tempRSIOB; InpRSIOversold = tempRSIOS;
+      InpMATrendPeriod = tempMATrend; InpMAScalpPeriod = tempMAScalp;
+      InpRiskPercent = tempRisk; InpNNLearningRate = tempNNLR;
+      layerStep = localLayerStep; InpSlippage = tempSlippage;
+
+      double winRate = trades > 0 ? winTrades / trades : 0;
+      return trades > 0 ? (profit / trades) * winRate - maxDrawdown / equity : DBL_MIN;
+   }
+
+   void GetOptimizedParams(double &result[]) {
+      ArrayCopy(result, bestParams);
+   }
+};
+
+class CObjectBase : public CObject {
+public:
+   virtual ~CObjectBase() {}
+};
+
+class PositionData : public CObjectBase {
+public:
+   ulong ticket;
+   double entryPrice, highestPrice, lowestPrice;
+   bool partialClosed;
+
+   PositionData() : ticket(0), entryPrice(0.0), highestPrice(0.0), lowestPrice(0.0), partialClosed(false) {}
+};
+
+class OrderLayer : public CObjectBase {
+public:
+   ulong ticket;
+   double price;
+   ENUM_ORDER_TYPE type;
+
+   OrderLayer() : ticket(0), price(0.0), type(ORDER_TYPE_BUY) {}
+};
+
+class EconomicEvent : public CObjectBase {
+public:
+   datetime eventTime;
+   string currency;
+   int impact;
+   string title;
+
+   EconomicEvent() : eventTime(0), currency(""), impact(0), title("") {}
+};
+
+// **Global Variables**
+CTrade Trade;
+double point;
+int atrHandle, maTrendHandle, maScalpHandle, rsiHandle;
+datetime lastBarTime, lastDailyCheck, lastOptimizeTime, lastNewsUpdate, lastCorrelationUpdate;
+double lastEquity, dailyEquityHigh;
+int consecutiveLosses, totalTradesToday;
+bool tradingHalted;
+MqlDateTime sessionStart, sessionEnd;
+double riskMultiplier = 1.0;
+ulong mmBuyOrder, mmSellOrder;
+double layerStep;
+
+SymbolData corrSymbols[];
+CMatrixDouble correlationMatrix;
+int corrMatrixSize;
+
+CArrayObj calendarEvents;
+GeneticParameters optimizedParams;
+CArrayObj positionTracker;
+CArrayObj activeLayers;
+
+NeuralProcessor *NN = NULL;
+QuantumOptimizer *QOpt = NULL;
+
+// **Utility Functions**
+void Log(string msg, LOG_LEVEL level = LOG_INFO) {
+   if(level == LOG_INFO && !MQLInfoInteger(MQL_TESTER)) return;
+   Print(TimeCurrent(), " [NEWLIFE] [" + EnumToString(level) + "] ", msg);
+}
+
+double GetIndicatorValue(int handle, int buffer = 0, int shift = 0) {
+   double values[1];
+   if(CopyBuffer(handle, buffer, shift, 1, values) != 1) {
+      Log("Failed to copy buffer for handle " + (string)handle + " at shift " + (string)shift, LOG_WARN);
+      return -1.0;
+   }
+   return values[0];
+}
+
+IndicatorValues GetAllIndicatorValues() {
+   IndicatorValues iv;
+   iv.atr = GetIndicatorValue(atrHandle);
+   iv.maTrend = GetIndicatorValue(maTrendHandle);
+   iv.maScalp = GetIndicatorValue(maScalpHandle);
+   iv.rsi = GetIndicatorValue(rsiHandle);
+   iv.valid = (iv.atr != -1.0 && iv.maTrend != -1.0);
+   return iv;
+}
+
+double GetVolatility(int shift = 0) {
+   double atr = GetIndicatorValue(atrHandle, 0, shift);
+   return (atr != -1.0) ? atr / point : 0.0;
+}
+
+bool IsSymbolValid(string symbol, MqlTick &tick) {
+   return SymbolInfoTick(symbol, tick);
+}
+
+// **Expert Initialization**
+int OnInit() {
+   MathSrand(GetTickCount());
+   point = SymbolInfoDouble(InpSymbol, SYMBOL_POINT);
+   if(point == 0) {
+      Log("Symbol point is zero, defaulting to 0.00001", LOG_WARN);
+      point = 0.00001;
+   }
+
+   Trade.SetExpertMagicNumber(InpMagicNumber);
+   Trade.SetDeviationInPoints((ulong)InpSlippage);
+
+   atrHandle = iATR(InpSymbol, InpTimeframe, InpATRPeriod);
+   maTrendHandle = iMA(InpSymbol, InpTimeframe, InpMATrendPeriod, 0, InpMAMethod, PRICE_CLOSE);
+   maScalpHandle = iMA(InpSymbol, InpTimeframe, InpMAScalpPeriod, 0, InpMAMethod, PRICE_CLOSE);
+   rsiHandle = iRSI(InpSymbol, InpTimeframe, InpRSIPeriod, PRICE_CLOSE);
+
+   if(atrHandle == INVALID_HANDLE || maTrendHandle == INVALID_HANDLE) {
+      Log("Critical indicator initialization failed (ATR or MATrend)", LOG_ERROR);
+      IndicatorRelease(atrHandle);
+      IndicatorRelease(maTrendHandle);
+      IndicatorRelease(maScalpHandle);
+      IndicatorRelease(rsiHandle);
+      return INIT_FAILED;
+   }
+   if(maScalpHandle == INVALID_HANDLE) {
+      Log("Warning: MAScalp indicator failed, proceeding without it", LOG_WARN);
+      maScalpHandle = INVALID_HANDLE;
+   }
+   if(rsiHandle == INVALID_HANDLE) {
+      Log("Warning: RSI indicator failed, proceeding without it", LOG_WARN);
+      rsiHandle = INVALID_HANDLE;
+   }
+
+   if(!InitializeCorrelationSystem()) {
+      Log("Correlation system initialization failed", LOG_ERROR);
+      return INIT_FAILED;
+   }
+
+   datetime serverTime = TimeCurrent();
+   TimeToStruct(serverTime, sessionStart);
+   sessionStart.hour = 0; sessionStart.min = 0;
+   sessionEnd = sessionStart; sessionEnd.hour = 23; sessionEnd.min = 59;
+
+   dailyEquityHigh = AccountInfoDouble(ACCOUNT_EQUITY);
+   lastEquity = dailyEquityHigh;
+   layerStep = GetVolatility() * InpATRMultiplierSL;
+
+   if(InpUseNeuralNet) {
+      NN = new NeuralProcessor(5, 10, 1);
+      TrainNeuralNetwork();
+   }
+   if(InpQuantumOptimize) QOpt = new QuantumOptimizer();
+
+   lastBarTime = iTime(InpSymbol, InpTimeframe, 0);
+   lastNewsUpdate = 0;
+   lastCorrelationUpdate = 0;
+   lastOptimizeTime = 0;
+
+   Log("Initialization completed successfully");
+   return INIT_SUCCEEDED;
+}
+
+// **Expert Deinitialization**
+void OnDeinit(const int reason) {
+   if(NN != NULL) { delete NN; NN = NULL; }
+   if(QOpt != NULL) { delete QOpt; QOpt = NULL; }
+   positionTracker.Clear();
+   activeLayers.Clear();
+   calendarEvents.Clear();
+   ArrayFree(corrSymbols);
+   correlationMatrix.Resize(0, 0);
+   IndicatorRelease(atrHandle);
+   IndicatorRelease(maTrendHandle);
+   IndicatorRelease(maScalpHandle);
+   IndicatorRelease(rsiHandle);
+   Log("Deinitialized with reason: " + (string)reason);
+}
+
+// **Expert Tick Function**
+void OnTick() {
+   MqlTick tick;
+   if(!SymbolInfoTick(InpSymbol, tick)) {
+      Log("Failed to retrieve tick data", LOG_WARN);
+      return;
+   }
+
+   datetime currentTime = iTime(InpSymbol, InpTimeframe, 0);
+   if(UseNewCandle && currentTime == lastBarTime) return;
+   lastBarTime = currentTime;
+
+   CheckDailyReset();
+   if(tradingHalted || (InpNewsFilter && IsNewsEvent())) {
+      Log("Trading halted due to news or conditions", LOG_INFO);
+      return;
+   }
+   if(!IsTradingSession() || !CheckSpread(tick)) return;
+
+   if(TimeCurrent() - lastNewsUpdate >= NewsCacheMinutes * 60) {
+      UpdateEconomicCalendar();
+      lastNewsUpdate = TimeCurrent();
+   }
+
+   if(TimeCurrent() - lastCorrelationUpdate >= 3600) {
+      UpdateCorrelations();
+      lastCorrelationUpdate = TimeCurrent();
+   }
+
+   if(InpQuantumOptimize && TimeCurrent() - lastOptimizeTime >= InpQOptimizeInterval && QOpt != NULL) {
+      QOpt.Optimize();
+      double newParams[];
+      QOpt.GetOptimizedParams(newParams);
+      InpATRMultiplierSL = newParams[0];
+      InpATRMultiplierTP = newParams[1];
+      InpRSIOverbought = newParams[2];
+      InpRSIOversold = newParams[3];
+      InpMATrendPeriod = (int)MathRound(newParams[4]);
+      InpMAScalpPeriod = (int)MathRound(newParams[5]);
+      InpRiskPercent = newParams[6];
+      InpNNLearningRate = newParams[7];
+      layerStep = newParams[8];
+      InpSlippage = newParams[9];
+      lastOptimizeTime = TimeCurrent();
+      Log("Parameters optimized via QuantumOptimizer");
+   }
+
+   IndicatorValues iv = GetAllIndicatorValues();
+   if(!iv.valid) {
+      Log("Critical indicator failure, skipping tick", LOG_WARN);
+      return;
+   }
+   double volatility = iv.atr / point;
+
+   ENUM_TREND_MODE trend = GetTrendDirection();
+   ENUM_MARKET_REGIME regime = DetectMarketRegime();
+
+   double nnPrediction = 0;
+   if(InpUseNeuralNet && NN != NULL) {
+      double nnInputs[5];
+      nnInputs[0] = NormalizeDouble((tick.ask - iClose(InpSymbol, InpTimeframe, 1)) / point, 2);
+      nnInputs[1] = NormalizeDouble((double)iVolume(InpSymbol, InpTimeframe, 0) / 1000.0, 2);
+      nnInputs[2] = NormalizeDouble(volatility / 100.0, 2);
+      nnInputs[3] = (double)trend;
+      nnInputs[4] = NormalizeDouble(AccountInfoDouble(ACCOUNT_EQUITY) / 100000.0, 2);
+      nnPrediction = NN.ForwardPass(nnInputs);
+   }
+
+   if(PositionsTotal() + OrdersTotal() < InpMaxTrades) {
+      ExecuteCoreStrategy(trend, volatility, tick, regime, nnPrediction, iv.maScalp, iv.rsi);
+   }
+   ManageMarketMaking(tick);
+   ManageStatisticalArbitrage();
+   ManageOrderLayers(tick);
+   ManagePositions(tick);
+   UpdateRiskParameters();
+   if(PositionsTotal() + OrdersTotal() < InpMaxTrades) OrderAnticipation(tick);
+   CheckFlashCrashes(tick);
+}
+
+// **Core Trading Functions**
+void ExecuteCoreStrategy(ENUM_TREND_MODE trend, double volatility, const MqlTick &tick, ENUM_MARKET_REGIME regime, double nnPrediction, double maScalp, double rsi) {
+   if(TimeCurrent() - lastDailyCheck < TradeCooldown) return;
+   double slMultiplier = (regime == REGIME_TRENDING) ? InpATRMultiplierSL * 0.8 : (regime == REGIME_MEAN_REVERSION ? InpATRMultiplierSL * 1.2 : InpATRMultiplierSL);
+   double tpMultiplier = (regime == REGIME_TRENDING) ? InpATRMultiplierTP * 1.5 : (regime == REGIME_MEAN_REVERSION ? InpATRMultiplierTP * 0.7 : InpATRMultiplierTP);
+
+   if(CheckBuyCondition(trend, volatility, tick, regime, nnPrediction, maScalp, rsi)) {
+      double lotSize = CalculateLotSize(ORDER_TYPE_BUY, tick.ask, volatility);
+      if(InpStealthMode) {
+         double offset = volatility * point * 0.5;
+         double entryPrice = tick.ask - offset;
+         double sl = entryPrice - volatility * slMultiplier * point;
+         double tp = entryPrice + volatility * tpMultiplier * point;
+         if(!Trade.BuyLimit(lotSize, entryPrice, InpSymbol, sl, tp, ORDER_TIME_GTC, 0, "Stealth Buy"))
+            Log("Stealth Buy order failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+         else
+            Log("Stealth Buy order placed: Lot=" + DoubleToString(lotSize, 2));
+      } else {
+         double sl = tick.ask - volatility * slMultiplier * point;
+         double tp = tick.ask + volatility * tpMultiplier * point;
+         if(!Trade.Buy(lotSize, InpSymbol, tick.ask, sl, tp, "Market Buy"))
+            Log("Buy order failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+         else
+            Log("Buy order placed: Lot=" + DoubleToString(lotSize, 2));
+      }
+      lastDailyCheck = TimeCurrent();
+   }
+   else if(CheckSellCondition(trend, volatility, tick, regime, nnPrediction, maScalp, rsi)) {
+      double lotSize = CalculateLotSize(ORDER_TYPE_SELL, tick.bid, volatility);
+      if(InpStealthMode) {
+         double offset = volatility * point * 0.5;
+         double entryPrice = tick.bid + offset;
+         double sl = entryPrice + volatility * slMultiplier * point;
+         double tp = entryPrice - volatility * tpMultiplier * point;
+         if(!Trade.SellLimit(lotSize, entryPrice, InpSymbol, sl, tp, ORDER_TIME_GTC, 0, "Stealth Sell"))
+            Log("Stealth Sell order failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+         else
+            Log("Stealth Sell order placed: Lot=" + DoubleToString(lotSize, 2));
+      } else {
+         double sl = tick.bid + volatility * slMultiplier * point;
+         double tp = tick.bid - volatility * tpMultiplier * point;
+         if(!Trade.Sell(lotSize, InpSymbol, tick.bid, sl, tp, "Market Sell"))
+            Log("Sell order failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+         else
+            Log("Sell order placed: Lot=" + DoubleToString(lotSize, 2));
+      }
+      lastDailyCheck = TimeCurrent();
+   }
+}
+
+bool CheckBuyCondition(ENUM_TREND_MODE trend, double volatility, const MqlTick &tick, ENUM_MARKET_REGIME regime, double nnPrediction, double maScalp, double rsi) {
+   if(trend != TREND_BULLISH || (regime == REGIME_HIGH_VOLATILITY && volatility > 50)) return false;
+   if(rsiHandle != INVALID_HANDLE && rsi > InpRSIOverbought) return false;
+   if(maScalp == -1.0 || GetIndicatorValue(maTrendHandle) == -1.0) return false;
+   bool maCondition = tick.ask > maScalp && tick.ask > GetIndicatorValue(maTrendHandle);
+   bool basicCondition = tick.ask > maScalp + volatility * InpATRMultiplierSL * 0.3 * point && volatility > MinATR;
+   return maCondition && basicCondition && (nnPrediction > 0.8 || !InpUseNeuralNet);
+}
+
+bool CheckSellCondition(ENUM_TREND_MODE trend, double volatility, const MqlTick &tick, ENUM_MARKET_REGIME regime, double nnPrediction, double maScalp, double rsi) {
+   if(trend != TREND_BEARISH || (regime == REGIME_HIGH_VOLATILITY && volatility > 50)) return false;
+   if(rsiHandle != INVALID_HANDLE && rsi < InpRSIOversold) return false;
+   if(maScalp == -1.0 || GetIndicatorValue(maTrendHandle) == -1.0) return false;
+   bool maCondition = tick.bid < maScalp && tick.bid < GetIndicatorValue(maTrendHandle);
+   bool basicCondition = tick.bid < maScalp - volatility * InpATRMultiplierSL * 0.3 * point && volatility > MinATR;
+   return maCondition && basicCondition && (nnPrediction < -0.8 || !InpUseNeuralNet);
+}
+
+void ManagePositions(const MqlTick &tick) {
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionSelectByTicket(ticket) && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber) {
+         UpdatePositionTracker(ticket, tick);
+         if(InpTrailingEnabled) ApplyTrailingStop(ticket, tick);
+         CheckEarlyExit(ticket, tick);
+
+         PositionData *pd = FindPositionData(ticket);
+         if(pd != NULL && !pd.partialClosed) {
+            double tp = PositionGetDouble(POSITION_TP);
+            double entryPrice = pd.entryPrice;
+            double halfTP;
+            ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            if(type == POSITION_TYPE_BUY)
+               halfTP = entryPrice + 0.5 * (tp - entryPrice);
+            else
+               halfTP = entryPrice - 0.5 * (entryPrice - tp);
+            double currentPrice = (type == POSITION_TYPE_BUY) ? tick.bid : tick.ask;
+            if((type == POSITION_TYPE_BUY && currentPrice >= halfTP) || (type == POSITION_TYPE_SELL && currentPrice <= halfTP)) {
+               double volume = PositionGetDouble(POSITION_VOLUME);
+               if(Trade.PositionClosePartial(ticket, volume * 0.75)) { // Close 75%
+                  pd.partialClosed = true;
+                  double newSL = entryPrice;
+                  if(!Trade.PositionModify(ticket, newSL, tp))
+                     Log("Failed to move SL to breakeven for ticket " + (string)ticket, LOG_ERROR);
+               } else {
+                  Log("Partial close failed for ticket " + (string)ticket, LOG_ERROR);
+               }
+            }
+         }
+      }
+   }
+}
+
+void UpdatePositionTracker(ulong ticket, const MqlTick &tick) {
+   PositionData *pd = FindPositionData(ticket);
+   if(pd == NULL) {
+      pd = new PositionData;
+      pd.ticket = ticket;
+      pd.entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      pd.highestPrice = pd.entryPrice;
+      pd.lowestPrice = pd.entryPrice;
+      pd.partialClosed = false;
+      positionTracker.Add(pd);
+   } else {
+      if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
+         pd.highestPrice = MathMax(pd.highestPrice, tick.bid);
+      else
+         pd.lowestPrice = MathMin(pd.lowestPrice, tick.ask);
+   }
+}
+
+PositionData* FindPositionData(ulong ticket) {
+   for(int i = 0; i < positionTracker.Total(); i++) {
+      PositionData *pd = positionTracker.At(i);
+      if(pd.ticket == ticket) return pd;
+   }
+   return NULL;
+}
+
+void ApplyTrailingStop(ulong ticket, const MqlTick &tick) {
+   if(!PositionSelectByTicket(ticket)) return;
+   double currentSL = PositionGetDouble(POSITION_SL);
+   double newSL = currentSL;
+   ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+   PositionData *pd = FindPositionData(ticket);
+   if(pd == NULL) return;
+
+   double distance = (type == POSITION_TYPE_BUY) ? (tick.bid - pd.entryPrice) / point : (pd.entryPrice - tick.ask) / point;
+   if(distance >= InpTrailingTrigger) {
+      newSL = (type == POSITION_TYPE_BUY) ? pd.entryPrice + (distance - InpTrailingStep) * point : pd.entryPrice - (distance - InpTrailingStep) * point;
+      if((type == POSITION_TYPE_BUY && newSL > currentSL + point) || (type == POSITION_TYPE_SELL && newSL < currentSL - point))
+         if(!Trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP)))
+            Log("Trailing stop modification failed for ticket " + (string)ticket, LOG_ERROR);
+   }
+}
+
+void CheckEarlyExit(ulong ticket, const MqlTick &tick) {
+   if(!PositionSelectByTicket(ticket)) return;
+   double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+   double currentPrice = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? tick.bid : tick.ask;
+   double volatility = GetVolatility();
+   if(volatility == 0.0) return;
+   double atrValue = volatility * point;
+
+   if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY && currentPrice > openPrice + atrValue * InpATRMultiplierTP * 0.5) {
+      double newTP = openPrice + atrValue * InpATRMultiplierTP * 0.75;
+      if(!Trade.PositionModify(ticket, PositionGetDouble(POSITION_SL), newTP))
+         Log("Early exit TP modification failed for ticket " + (string)ticket, LOG_ERROR);
+   } else if(PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_SELL && currentPrice < openPrice - atrValue * InpATRMultiplierTP * 0.5) {
+      double newTP = openPrice - atrValue * InpATRMultiplierTP * 0.75;
+      if(!Trade.PositionModify(ticket, PositionGetDouble(POSITION_SL), newTP))
+         Log("Early exit TP modification failed for ticket " + (string)ticket, LOG_ERROR);
+   }
+}
+
+void ManageMarketMaking(const MqlTick &tick) {
+   if(OrdersTotal() >= InpMaxTrades / 2) return;
+   CheckMMOrders(tick);
+   double spread = (tick.ask - tick.bid) / point;
+   if(spread > 0.5 && spread < InpMaxSpread) PlaceMMOrders(tick);
+   else CancelMMOrders();
+}
+
+void PlaceMMOrders(const MqlTick &tick) {
+   double volatility = GetVolatility();
+   if(volatility == 0.0) return;
+   double spread = (tick.ask - tick.bid) / point;
+   double offset = spread * 2.0;
+   if(mmBuyOrder == 0)
+      mmBuyOrder = SendPendingOrder(ORDER_TYPE_BUY_LIMIT, tick.bid - offset * point, CalculateLotSize(ORDER_TYPE_BUY, tick.ask, volatility));
+   if(mmSellOrder == 0)
+      mmSellOrder = SendPendingOrder(ORDER_TYPE_SELL_LIMIT, tick.ask + offset * point, CalculateLotSize(ORDER_TYPE_SELL, tick.bid, volatility));
+}
+
+ulong SendPendingOrder(ENUM_ORDER_TYPE type, double price, double lotSize) {
+   if(type == ORDER_TYPE_BUY_LIMIT) {
+      if(Trade.BuyLimit(lotSize, price, InpSymbol, 0, 0, ORDER_TIME_GTC, 0, "MM Order"))
+         return Trade.ResultOrder();
+   } else if(type == ORDER_TYPE_SELL_LIMIT) {
+      if(Trade.SellLimit(lotSize, price, InpSymbol, 0, 0, ORDER_TIME_GTC, 0, "MM Order"))
+         return Trade.ResultOrder();
+   } else {
+      Log("Unsupported order type for SendPendingOrder", LOG_ERROR);
+   }
+   return 0;
+}
+
+void CancelMMOrders() {
+   if(mmBuyOrder != 0 && OrderSelect(mmBuyOrder)) {
+      if(!Trade.OrderDelete(mmBuyOrder)) Log("Failed to delete MM Buy order " + (string)mmBuyOrder, LOG_ERROR);
+      mmBuyOrder = 0;
+   }
+   if(mmSellOrder != 0 && OrderSelect(mmSellOrder)) {
+      if(!Trade.OrderDelete(mmSellOrder)) Log("Failed to delete MM Sell order " + (string)mmSellOrder, LOG_ERROR);
+      mmSellOrder = 0;
+   }
+}
+
+void CheckMMOrders(const MqlTick &tick) {
+   if(mmBuyOrder != 0 && !OrderSelect(mmBuyOrder)) mmBuyOrder = 0;
+   if(mmSellOrder != 0 && !OrderSelect(mmSellOrder)) mmSellOrder = 0;
+}
+
+void ManageStatisticalArbitrage() {
+   if(PositionsTotal() >= InpMaxTrades) return;
+   MqlTick tick;
+   if(!SymbolInfoTick(InpSymbol, tick)) return;
+   double volatility = GetVolatility();
+   if(volatility == 0.0) return;
+   for(int i = 0; i < corrMatrixSize; i++) {
+      if(corrSymbols[i].symbol == InpSymbol) continue;
+      double corr = correlationMatrix[0][i];
+      if(corr < -0.8) OpenPosition(ORDER_TYPE_BUY, tick.ask, volatility);
+      else if(corr > 0.8) OpenPosition(ORDER_TYPE_SELL, tick.bid, volatility);
+   }
+}
+
+void ManageOrderLayers(const MqlTick &tick) {
+   CleanExpiredLayers();
+   if(activeLayers.Total() >= InpMaxLayers * 2) return;
+   double volatility = GetVolatility();
+   if(volatility == 0.0) return;
+
+   double totalUnrealizedPL = 0;
+   for(int i = 0; i < activeLayers.Total(); i++) {
+      OrderLayer *layer = activeLayers.At(i);
+      if(OrderSelect(layer.ticket)) {
+         double currentPrice = (layer.type == ORDER_TYPE_BUY_LIMIT) ? tick.bid : tick.ask;
+         totalUnrealizedPL += (currentPrice - layer.price) * CalculateLotSize(layer.type == ORDER_TYPE_BUY_LIMIT ? ORDER_TYPE_BUY : ORDER_TYPE_SELL, layer.price, volatility);
+      }
+   }
+   if(totalUnrealizedPL < -InpMaxDailyLoss * AccountInfoDouble(ACCOUNT_EQUITY) / 100 * 0.5) { // Stricter drawdown check
+      CloseAllPositions();
+      Log("Layer drawdown limit exceeded", LOG_ERROR);
+      return;
+   }
+
+   double spread = (tick.ask - tick.bid) / point;
+   double localLayerStep = spread * 2.0; // Tighter spacing
+   double basePriceBuy = tick.bid - localLayerStep * InpMaxLayers;
+   for(int i = 0; i < InpMaxLayers; i++) {
+      double layerPrice = basePriceBuy + i * localLayerStep;
+      if(!LayerExists(ORDER_TYPE_BUY_LIMIT, layerPrice)) AddLayer(ORDER_TYPE_BUY_LIMIT, layerPrice);
+   }
+
+   double basePriceSell = tick.ask + localLayerStep * InpMaxLayers;
+   for(int i = 0; i < InpMaxLayers; i++) {
+      double layerPrice = basePriceSell - i * localLayerStep;
+      if(!LayerExists(ORDER_TYPE_SELL_LIMIT, layerPrice)) AddLayer(ORDER_TYPE_SELL_LIMIT, layerPrice);
+   }
+}
+
+bool LayerExists(ENUM_ORDER_TYPE type, double price) {
+   for(int i = 0; i < activeLayers.Total(); i++) {
+      OrderLayer *layer = activeLayers.At(i);
+      if(layer.type == type && MathAbs(layer.price - price) < point * 0.1) return true;
+   }
+   return false;
+}
+
+void AddLayer(ENUM_ORDER_TYPE type, double price) {
+   double volatility = GetVolatility();
+   if(volatility == 0.0) return;
+   OrderLayer *newLayer = new OrderLayer;
+   newLayer.ticket = SendPendingOrder(type, price, CalculateLotSize(type == ORDER_TYPE_BUY_LIMIT ? ORDER_TYPE_BUY : ORDER_TYPE_SELL, price, volatility));
+   newLayer.price = price;
+   newLayer.type = type;
+   activeLayers.Add(newLayer);
+}
+
+void CleanExpiredLayers() {
+   for(int i = activeLayers.Total() - 1; i >= 0; i--) {
+      OrderLayer *layer = activeLayers.At(i);
+      if(layer.ticket == 0 || !OrderSelect(layer.ticket)) {
+         activeLayers.Delete(i);
+         delete layer;
+      }
+   }
+}
+
+void UpdateRiskParameters() {
+   double currentEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double dailyDrawdown = (dailyEquityHigh - currentEquity) / dailyEquityHigh * 100;
+
+   if(currentEquity < lastEquity) {
+      consecutiveLosses++;
+      riskMultiplier = MathMax(0.5, riskMultiplier * 0.9); // Slower reduction
+      Log("Consecutive loss detected, risk multiplier adjusted to " + DoubleToString(riskMultiplier, 2));
+   } else {
+      consecutiveLosses = 0;
+      riskMultiplier = MathMin(1.5, riskMultiplier * 1.1); // Faster recovery
+   }
+   lastEquity = currentEquity;
+
+   if(dailyDrawdown >= InpMaxDailyLoss) {
+      tradingHalted = true;
+      CloseAllPositions();
+      Log("Max daily loss exceeded: " + DoubleToString(dailyDrawdown, 2) + "%", LOG_ERROR);
+      Sleep(InpCooloffPeriod * 60000);
+      tradingHalted = false;
+      dailyEquityHigh = currentEquity;
+   }
+}
+
+void CloseAllPositions() {
+   for(int i = PositionsTotal() - 1; i >= 0; i--) {
+      if(PositionSelectByTicket(PositionGetTicket(i)))
+         if(!Trade.PositionClose(PositionGetTicket(i)))
+            Log("Failed to close position " + (string)PositionGetTicket(i), LOG_ERROR);
+   }
+   for(int i = OrdersTotal() - 1; i >= 0; i--) {
+      if(OrderSelect(OrderGetTicket(i)))
+         if(!Trade.OrderDelete(OrderGetTicket(i)))
+            Log("Failed to delete order " + (string)OrderGetTicket(i), LOG_ERROR);
+   }
+}
+
+double CalculateLotSize(ENUM_ORDER_TYPE type, double price, double volatility) {
+   if(volatility == 0.0) return SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MIN);
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double riskAmount = equity * (InpRiskPercent / 100) * riskMultiplier;
+   double tickValue = SymbolInfoDouble(InpSymbol, SYMBOL_TRADE_TICK_VALUE);
+   if(tickValue == 0) {
+      double contractSize = SymbolInfoDouble(InpSymbol, SYMBOL_TRADE_CONTRACT_SIZE);
+      double tickSize = SymbolInfoDouble(InpSymbol, SYMBOL_TRADE_TICK_SIZE);
+      tickValue = tickSize * contractSize / point;
+      if(tickValue == 0) {
+         Log("Tick value calculation failed, using minimum lot", LOG_WARN);
+         return SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MIN);
+      }
+   }
+   double riskPoints = volatility * InpATRMultiplierSL;
+   if(riskPoints == 0) return SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MIN);
+   double lotSize = riskAmount / (riskPoints * tickValue);
+   double minLot = SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MIN);
+   double maxLot = SymbolInfoDouble(InpSymbol, SYMBOL_VOLUME_MAX);
+   lotSize = NormalizeDouble(MathMax(minLot, MathMin(lotSize, equity * 0.01 / tickValue)), 2); // Cap at 1% equity
+   if(InpOrderSizeVariation > 0) {
+      double variation = (MathRand() / 32767.0 - 0.5) * InpOrderSizeVariation / 100.0;
+      lotSize *= (1 + variation);
+      lotSize = NormalizeDouble(MathMax(minLot, MathMin(lotSize, maxLot)), 2);
+   }
+   return lotSize;
+}
+
+bool IsTradingSession() {
+   datetime serverTime = TimeCurrent();
+   MqlDateTime currentTime;
+   TimeToStruct(serverTime, currentTime);
+   return (currentTime.hour >= sessionStart.hour && currentTime.hour < sessionEnd.hour);
+}
+
+bool CheckSpread(const MqlTick &tick) {
+   double currentSpread = (tick.ask - tick.bid) / point;
+   static double spreadMA = 0.0;
+   static int spreadCount = 0;
+   spreadMA = (spreadMA * spreadCount + currentSpread) / (spreadCount + 1);
+   spreadCount = MathMin(spreadCount + 1, 100);
+   return currentSpread <= InpMaxSpread && currentSpread <= spreadMA * 1.5;
+}
+
+ENUM_TREND_MODE GetTrendDirection() {
+   double maTrend[5], maScalp[5];
+   if(CopyBuffer(maTrendHandle, 0, 0, 5, maTrend) != 5 || CopyBuffer(maScalpHandle, 0, 0, 5, maScalp) != 5)
+      return TREND_NEUTRAL;
+   bool bullTrend = maTrend[0] > maTrend[1] && maTrend[1] > maTrend[2];
+   bool bearTrend = maTrend[0] < maTrend[1] && maTrend[1] < maTrend[2];
+   double trendSlope = (maTrend[0] - maTrend[4]) / 4;
+   double scalpSlope = (maScalp[0] - maScalp[4]) / 4;
+   if(trendSlope > 0 && scalpSlope > 0 && bullTrend) return TREND_BULLISH;
+   if(trendSlope < 0 && scalpSlope < 0 && bearTrend) return TREND_BEARISH;
+   return TREND_NEUTRAL;
+}
+
+ENUM_TREND_MODE GetTrendDirectionSim(int shift) {
+   double maTrend[5], maScalp[5];
+   if(CopyBuffer(maTrendHandle, 0, shift, 5, maTrend) != 5 || CopyBuffer(maScalpHandle, 0, shift, 5, maScalp) != 5)
+      return TREND_NEUTRAL;
+   bool bullTrend = maTrend[0] > maTrend[1] && maTrend[1] > maTrend[2];
+   bool bearTrend = maTrend[0] < maTrend[1] && maTrend[1] < maTrend[2];
+   double trendSlope = (maTrend[0] - maTrend[4]) / 4;
+   double scalpSlope = (maScalp[0] - maScalp[4]) / 4;
+   if(trendSlope > 0 && scalpSlope > 0 && bullTrend) return TREND_BULLISH;
+   if(trendSlope < 0 && scalpSlope < 0 && bearTrend) return TREND_BEARISH;
+   return TREND_NEUTRAL;
+}
+
+bool IsNewsEvent() {
+   if(!InpNewsFilter) return false;
+   datetime serverTime = TimeCurrent();
+   string baseCurrency = SymbolInfoString(InpSymbol, SYMBOL_CURRENCY_BASE);
+   string quoteCurrency = SymbolInfoString(InpSymbol, SYMBOL_CURRENCY_PROFIT);
+   for(int i = 0; i < calendarEvents.Total(); i++) {
+      EconomicEvent *event = calendarEvents.At(i);
+      if(event.impact < NewsImpactThreshold) continue;
+      if(event.currency != baseCurrency && event.currency != quoteCurrency) continue;
+      datetime eventStart = event.eventTime - InpNewsBeforeMin * 60;
+      datetime eventEnd = event.eventTime + InpNewsAfterMin * 60;
+      if(serverTime >= eventStart && serverTime <= eventEnd) {
+         Log("News event detected: " + event.title, LOG_INFO);
+         return true;
+      }
+   }
+   return false;
+}
+
+void CheckDailyReset() {
+   datetime serverTime = TimeCurrent();
+   MqlDateTime currentTime;
+   TimeToStruct(serverTime, currentTime);
+   if(currentTime.day != sessionStart.day) {
+      dailyEquityHigh = AccountInfoDouble(ACCOUNT_EQUITY);
+      consecutiveLosses = 0;
+      totalTradesToday = 0;
+      tradingHalted = false;
+      TimeToStruct(serverTime, sessionStart);
+      sessionEnd = sessionStart;
+      sessionEnd.hour = 23; sessionEnd.min = 59;
+      positionTracker.Clear();
+      activeLayers.Clear();
+      mmBuyOrder = 0; mmSellOrder = 0;
+      Log("Daily reset performed");
+   }
+   if(AccountInfoDouble(ACCOUNT_EQUITY) > dailyEquityHigh) dailyEquityHigh = AccountInfoDouble(ACCOUNT_EQUITY);
+}
+
+void CheckFlashCrashes(const MqlTick &tick) {
+   static double lastPrices[10];
+   static int priceIndex = 0;
+   lastPrices[priceIndex] = tick.bid;
+   priceIndex = (priceIndex + 1) % 10;
+   double maxMove = 0;
+   for(int i = 0; i < 9; i++) {
+      double move = MathAbs(lastPrices[i] - lastPrices[i + 1]) / point;
+      if(move > maxMove) maxMove = move;
+   }
+   double atr = GetVolatility();
+   if(atr > 0 && maxMove > 7 * atr) { // Increased threshold
+      CloseAllPositions();
+      Log("Flash crash detected! All positions closed.", LOG_ERROR);
+      tradingHalted = true;
+      Sleep(60000);
+      tradingHalted = false;
+   }
+}
+
+void OrderAnticipation(const MqlTick &tick) {
+   static double lastPrices[5];
+   static int priceIndex = 0;
+   lastPrices[priceIndex] = tick.bid;
+   priceIndex = (priceIndex + 1) % 5;
+   double momentum = (lastPrices[(priceIndex + 4) % 5] - lastPrices[priceIndex]) / 4;
+   double volatility = GetVolatility();
+   if(volatility == 0.0) return;
+   if(momentum > 2.0 * volatility) {
+      double lotSize = CalculateLotSize(ORDER_TYPE_BUY, tick.ask, volatility);
+      if(!Trade.Buy(lotSize, InpSymbol, tick.ask, 0, 0, "Anticipatory Buy"))
+         Log("Anticipatory Buy failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+   } else if(momentum < -2.0 * volatility) {
+      double lotSize = CalculateLotSize(ORDER_TYPE_SELL, tick.bid, volatility);
+      if(!Trade.Sell(lotSize, InpSymbol, tick.bid, 0, 0, "Anticipatory Sell"))
+         Log("Anticipatory Sell failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+   }
+}
+
+void OpenPosition(ENUM_ORDER_TYPE type, double price, double volatility) {
+   if(volatility == 0.0) return;
+   double sl = (type == ORDER_TYPE_BUY) ? price - volatility * InpATRMultiplierSL * point : price + volatility * InpATRMultiplierSL * point;
+   double tp = (type == ORDER_TYPE_BUY) ? price + volatility * InpATRMultiplierTP * point : price - volatility * InpATRMultiplierTP * point;
+   double lotSize = CalculateLotSize(type, price, volatility);
+   if(type == ORDER_TYPE_BUY) {
+      if(!Trade.Buy(lotSize, InpSymbol, price, sl, tp, "Arbitrage Order"))
+         Log("Arbitrage Buy failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+   } else {
+      if(!Trade.Sell(lotSize, InpSymbol, price, sl, tp, "Arbitrage Order"))
+         Log("Arbitrage Sell failed: " + Trade.ResultRetcodeDescription(), LOG_ERROR);
+   }
+}
+
+void TrainNeuralNetwork() {
+   if(!InpUseNeuralNet || NN == NULL) return;
+   double closes[];
+   long volumes[];
+   double atrs[];
+   ArraySetAsSeries(closes, true);
+   ArraySetAsSeries(volumes, true);
+   ArraySetAsSeries(atrs, true);
+   if(CopyClose(InpSymbol, InpTimeframe, 0, 100, closes) < 100 || 
+      CopyRealVolume(InpSymbol, InpTimeframe, 0, 100, volumes) < 100 ||
+      CopyBuffer(atrHandle, 0, 0, 100, atrs) < 100) {
+      Log("Insufficient data for neural network training", LOG_WARN);
+      return;
+   }
+
+   double maxVolume = ArrayMaximum(volumes);
+   double maxATR = ArrayMaximum(atrs);
+   double maxEquity = AccountInfoDouble(ACCOUNT_EQUITY) * 1.5;
+
+   for(int i = 1; i < 99; i++) {
+      double inputs[5];
+      inputs[0] = NormalizeDouble((closes[i - 1] - closes[i]) / point, 2);
+      inputs[1] = maxVolume > 0 ? NormalizeDouble(volumes[i] / maxVolume, 2) : 0.0;
+      inputs[2] = maxATR > 0 ? NormalizeDouble(atrs[i] / maxATR, 2) : 0.0;
+      inputs[3] = (double)GetTrendDirectionSim(i);
+      inputs[4] = maxEquity > 0 ? NormalizeDouble(AccountInfoDouble(ACCOUNT_EQUITY) / maxEquity, 2) : 0.0;
+      double target = (closes[i + 1] > closes[i]) ? 1.0 : -1.0;
+      NN.Train(inputs, target);
+   }
+   Log("Neural network training completed with dynamic normalization");
+}
+
+double EvaluateFitness(const GeneticParameters &gp) {
+   double profit = 0, trades = 0;
+   for(int i = 1; i <= 100 && i < iBars(InpSymbol, InpTimeframe); i++) {
+      MqlTick tick;
+      tick.bid = iClose(InpSymbol, InpTimeframe, i);
+      tick.ask = tick.bid + SymbolInfoInteger(InpSymbol, SYMBOL_SPREAD) * point;
+      double volatility = iATR(InpSymbol, InpTimeframe, InpATRPeriod) / point;
+      ENUM_TREND_MODE trend = GetTrendDirectionSim(i);
+      double maScalp = iMA(InpSymbol, InpTimeframe, InpMAScalpPeriod, 0, InpMAMethod, PRICE_CLOSE);
+      double rsi = iRSI(InpSymbol, InpTimeframe, InpRSIPeriod, PRICE_CLOSE);
+      if(CheckBuyCondition(trend, volatility, tick, REGIME_TRENDING, 0.8, maScalp, rsi)) {
+         profit += (tick.ask + volatility * gp.atrTpMultiplier * point - tick.ask);
+         trades++;
+      } else if(CheckSellCondition(trend, volatility, tick, REGIME_TRENDING, -0.8, maScalp, rsi)) {
+         profit += (tick.bid - (tick.bid - volatility * gp.atrTpMultiplier * point));
+         trades++;
+      }
+   }
+   return trades > 0 ? profit / trades : DBL_MIN;
+}
+
+void RunGeneticOptimization() {
+   int populationSize = 50, generations = 100;
+   double fitnessScores[];
+   GeneticParameters population[];
+   ArrayResize(fitnessScores, populationSize);
+   ArrayResize(population, populationSize);
+
+   for(int i = 0; i < populationSize; i++) {
+      population[i].atrSlMultiplier = MathRand() / 32767.0 * 2.0;
+      population[i].atrTpMultiplier = MathRand() / 32767.0 * 3.0;
+      population[i].rsiOverbought = 50.0 + MathRand() / 32767.0 * 50.0;
+      population[i].rsiOversold = MathRand() / 32767.0 * 50.0;
+      fitnessScores[i] = EvaluateFitness(population[i]);
+   }
+
+   for(int gen = 0; gen < generations; gen++) {
+      GeneticParameters selectedParents[2];
+      for(int i = 0; i < 2; i++) {
+         int idx1 = MathRand() % populationSize;
+         int idx2 = MathRand() % populationSize;
+         selectedParents[i] = (fitnessScores[idx1] > fitnessScores[idx2]) ? population[idx1] : population[idx2];
+      }
+
+      GeneticParameters child;
+      child.atrSlMultiplier = (selectedParents[0].atrSlMultiplier + selectedParents[1].atrSlMultiplier) / 2.0;
+      child.atrTpMultiplier = (selectedParents[0].atrTpMultiplier + selectedParents[1].atrTpMultiplier) / 2.0;
+      child.rsiOverbought = MathMax(30.0, MathMin(100.0, (selectedParents[0].rsiOverbought + selectedParents[1].rsiOverbought) / 2.0));
+      child.rsiOversold = MathMax(0.0, MathMin(70.0, (selectedParents[0].rsiOversold + selectedParents[1].rsiOversold) / 2.0));
+
+      if(MathRand() % 100 < 5) {
+         child.atrSlMultiplier += (MathRand() / 32767.0 - 0.5) * 0.1;
+         child.atrTpMultiplier += (MathRand() / 32767.0 - 0.5) * 0.1;
+         child.rsiOverbought = MathMax(30.0, MathMin(100.0, child.rsiOverbought + (MathRand() / 32767.0 - 0.5) * 10.0));
+         child.rsiOversold = MathMax(0.0, MathMin(70.0, child.rsiOversold + (MathRand() / 32767.0 - 0.5) * 10.0));
+      }
+
+      double childFitness = EvaluateFitness(child);
+      int worstIndex = ArrayMinimum(fitnessScores);
+      if(childFitness > fitnessScores[worstIndex]) {
+         population[worstIndex] = child;
+         fitnessScores[worstIndex] = childFitness;
+      }
+   }
+
+   int bestIndex = ArrayMaximum(fitnessScores);
+   optimizedParams = population[bestIndex];
+   InpATRMultiplierSL = optimizedParams.atrSlMultiplier;
+   InpATRMultiplierTP = optimizedParams.atrTpMultiplier;
+   InpRSIOverbought = optimizedParams.rsiOverbought;
+   InpRSIOversold = optimizedParams.rsiOversold;
+   Log("Genetic optimization completed");
+}
+
+void UpdateEconomicCalendar() {
+   calendarEvents.Clear();
+   MqlCalendarValue values[];
+   datetime from = TimeCurrent() - 24 * 60 * 60;  // 24 hours ago
+   datetime to = TimeCurrent() + 24 * 60 * 60;    // 24 hours ahead
+   
+   if(!CalendarValueHistory(values, from, to)) {
+      Log("Failed to fetch economic calendar: " + (string)GetLastError(), LOG_WARN);
+      EconomicEvent *mockEvent = new EconomicEvent;
+      mockEvent.eventTime = TimeCurrent() + 3600;
+      mockEvent.currency = "USD";
+      mockEvent.impact = 3;
+      mockEvent.title = "Mock News Event";
+      calendarEvents.Add(mockEvent);
+      Log("Using mock calendar event");
+      return;
+   }
+   
+   for(int i = 0; i < ArraySize(values); i++) {
+      MqlCalendarEvent eventDetail;
+      if(CalendarEventById(values[i].event_id, eventDetail)) {
+         EconomicEvent *event = new EconomicEvent;
+         event.eventTime = values[i].time;
+         MqlCalendarCountry country;
+         if(CalendarCountryById(eventDetail.country_id, country)) {
+            event.currency = country.currency;
+         } else {
+            event.currency = "";
+         }
+         event.impact = (int)eventDetail.importance;
+         event.title = eventDetail.name;
+         calendarEvents.Add(event);
+      }
+   }
+   Log("Economic calendar updated with " + (string)ArraySize(values) + " events");
+}
+
+ENUM_MARKET_REGIME DetectMarketRegime() {
+   static double priceHistory[200];
+   static int priceIndex = 0;
+   priceHistory[priceIndex] = iClose(InpSymbol, InpTimeframe, 0);
+   priceIndex = (priceIndex + 1) % 200;
+   double dMean, dVar, dSkew, dKurt;
+   CAlglib::SampleMoments(priceHistory, 200, dMean, dVar, dSkew, dKurt);
+   if(dKurt > 3.5 + 0.01 * InpRiskPercent) return REGIME_HIGH_VOLATILITY;
+   if(MathAbs(dSkew) > 0.5 + 0.005 * InpRiskPercent) return REGIME_TRENDING;
+   return REGIME_MEAN_REVERSION;
+}
+
+bool InitializeCorrelationSystem() {
+   string symbols[];
+   int size = StringSplit(CorrelationSymbols, ',', symbols);
+   ArrayResize(corrSymbols, size);
+   corrMatrixSize = size;
+   correlationMatrix.Resize(size, size);
+   for(int i = 0; i < size; i++) {
+      StringTrimLeft(symbols[i]);
+      StringTrimRight(symbols[i]);
+      corrSymbols[i].symbol = symbols[i];
+      MqlTick tick;
+      if(!IsSymbolValid(corrSymbols[i].symbol, tick)) {
+         Log("Invalid symbol in correlation: " + corrSymbols[i].symbol, LOG_WARN);
+         corrSymbols[i].currentPrice = 0.0;
+         continue;
+      }
+      corrSymbols[i].currentPrice = tick.bid;
+   }
+   UpdateCorrelations();
+   return true;
+}
+
+void UpdateCorrelations() {
+   for(int i = 0; i < corrMatrixSize; i++) {
+      correlationMatrix.Set(i, i, 1.0);
+      for(int j = i + 1; j < corrMatrixSize; j++) {
+         double corr = CalculateCorrelation(corrSymbols[i].symbol, corrSymbols[j].symbol);
+         correlationMatrix.Set(i, j, corr);
+         correlationMatrix.Set(j, i, corr);
+      }
+   }
+   lastCorrelationUpdate = TimeCurrent();
+   Log("Correlations updated");
+}
+
+double CalculateCorrelation(string symbol1, string symbol2) {
+   double prices1[], prices2[];
+   ArraySetAsSeries(prices1, true);
+   ArraySetAsSeries(prices2, true);
+   int copied1 = CopyClose(symbol1, InpTimeframe, 0, CorrelationLookback, prices1);
+   int copied2 = CopyClose(symbol2, InpTimeframe, 0, CorrelationLookback, prices2);
+   if(copied1 != CorrelationLookback || copied2 != CorrelationLookback) return 0.0;
+
+   double logReturns1[], logReturns2[];
+   ArrayResize(logReturns1, CorrelationLookback - 1);
+   ArrayResize(logReturns2, CorrelationLookback - 1);
+   for(int i = 0; i < CorrelationLookback - 1; i++) {
+      if(prices1[i + 1] == 0 || prices2[i + 1] == 0) return 0.0;
+      logReturns1[i] = UseLogReturns ? MathLog(prices1[i] / prices1[i + 1]) : prices1[i] - prices1[i + 1];
+      logReturns2[i] = UseLogReturns ? MathLog(prices2[i] / prices2[i + 1]) : prices2[i] - prices2[i + 1];
+   }
+   double corr = 0.0;
+   CAlglib::PearsonCorr2(logReturns1, logReturns2, corr);
+   return corr;
+}
+//+------------------------------------------------------------------+
